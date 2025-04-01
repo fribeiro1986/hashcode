@@ -1,10 +1,9 @@
-
 <!DOCTYPE html>
 <html lang="pt">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analisador de Arquivos</title>
+    <title>Analisador de Arquivos Confiável</title>
     <style>
         body {
             font-family: 'Arial', sans-serif;
@@ -61,12 +60,24 @@
             margin-bottom: 5px;
             color: #764ba2;
         }
+        .warning {
+            color: #d32f2f;
+            font-size: 14px;
+            margin-top: 10px;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h2>Analisador de Arquivos</h2>
-        <input type="file" id="entradaArquivo" accept="image/*">
+        <h2>Analisador de Arquivos Confiável</h2>
+        <p class="warning">Para hashes consistentes no mobile: use arquivos ZIP ou desative otimizações no navegador.</p>
+        
+        <input type="file" id="entradaArquivo" accept="image/*,application/octet-stream,.zip">
+        
+        <div class="info-box">
+            <h3>Informações do Arquivo:</h3>
+            <pre id="fileInfo">Nenhum arquivo selecionado.</pre>
+        </div>
         
         <div class="info-box">
             <h3>SHA-256:</h3>
@@ -80,7 +91,7 @@
         
         <div class="info-box">
             <h3>Informações do Usuário:</h3>
-            <pre id="userInfo">Carregando IP e data/hora...</pre>
+            <pre id="userInfo">Carregando...</pre>
         </div>
     </div>
 
@@ -101,13 +112,18 @@
         // Função para extrair metadados (EXIF ou básicos)
         async function extrairMetadados(arquivo) {
             return new Promise((resolve) => {
-                if (typeof EXIF !== 'undefined') {
+                if (typeof EXIF !== 'undefined' && arquivo.type.startsWith('image/')) {
                     EXIF.getData(arquivo, function() {
                         const exifData = EXIF.getAllTags(this);
                         if (Object.keys(exifData).length > 0) {
                             resolve(exifData);
                         } else {
-                            resolve(this);
+                            resolve({
+                                name: arquivo.name,
+                                type: arquivo.type,
+                                size: arquivo.size + ' bytes',
+                                lastModified: new Date(arquivo.lastModified).toLocaleString()
+                            });
                         }
                     });
                 } else {
@@ -115,14 +131,14 @@
                     resolve({
                         name: arquivo.name,
                         type: arquivo.type,
-                        size: arquivo.size,
-                        lastModified: new Date(arquivo.lastModified).toLocaleString(),
+                        size: arquivo.size + ' bytes',
+                        lastModified: new Date(arquivo.lastModified).toLocaleString()
                     });
                 }
             });
         }
 
-        // Função para obter IP e data/hora
+        // Função para obter informações do usuário
         async function obterInformacoesUsuario() {
             try {
                 const response = await axios.get('https://api.ipify.org?format=json');
@@ -131,13 +147,15 @@
                 return {
                     ip,
                     dataHora: agora.toLocaleString(),
-                    userAgent: navigator.userAgent
+                    userAgent: navigator.userAgent,
+                    platform: navigator.platform
                 };
             } catch (erro) {
                 return {
                     ip: "Não foi possível obter o IP",
                     dataHora: new Date().toLocaleString(),
-                    userAgent: navigator.userAgent
+                    userAgent: navigator.userAgent,
+                    platform: navigator.platform
                 };
             }
         }
@@ -153,9 +171,12 @@
             if (!arquivo) return;
 
             try {
+                // Exibe informações imediatas do arquivo
+                document.getElementById('fileInfo').textContent = `Nome: ${arquivo.name}\nTipo: ${arquivo.type}\nTamanho: ${arquivo.size} bytes`;
+                
                 // Atualiza interface durante processamento
-                document.getElementById('saidaHash').textContent = "Calculando...";
-                document.getElementById('metadata').textContent = "Extraindo metadados...";
+                document.getElementById('saidaHash').textContent = "Calculando hash...";
+                document.getElementById('metadata').textContent = "Analisando metadados...";
                 
                 // Processa em paralelo
                 const [hash, metadados, userInfo] = await Promise.all([
@@ -169,10 +190,18 @@
                 document.getElementById('metadata').textContent = formatarObjeto(metadados);
                 document.getElementById('userInfo').textContent = formatarObjeto(userInfo);
 
+                // Debug no console
+                console.log('Arquivo processado:', {
+                    nome: arquivo.name,
+                    tipo: arquivo.type,
+                    tamanho: arquivo.size,
+                    hash
+                });
+
             } catch (erro) {
                 console.error("Erro:", erro);
-                document.getElementById('saidaHash').textContent = "Erro no processamento";
-                document.getElementById('metadata').textContent = "Erro ao extrair metadados";
+                document.getElementById('saidaHash').textContent = "Erro no cálculo do hash";
+                document.getElementById('metadata').textContent = "Erro na análise de metadados";
             }
         });
 
