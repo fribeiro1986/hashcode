@@ -1,9 +1,10 @@
+
 <!DOCTYPE html>
 <html lang="pt">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Calculadora SHA-256</title>
+    <title>Analisador de Arquivos</title>
     <style>
         body {
             font-family: 'Arial', sans-serif;
@@ -11,9 +12,11 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            height: 100vh;
+            min-height: 100vh;
             background: linear-gradient(135deg, #667eea, #764ba2);
             color: white;
+            margin: 0;
+            padding: 20px;
         }
         .container {
             background: rgba(255, 255, 255, 0.9);
@@ -22,6 +25,8 @@
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
             text-align: center;
             color: black;
+            width: 90%;
+            max-width: 600px;
         }
         input {
             margin: 15px 0;
@@ -32,88 +37,148 @@
             background: #764ba2;
             color: white;
             font-size: 16px;
+            width: 100%;
         }
         input:hover {
             background: #5a3e88;
         }
-        p {
+        p, pre {
             word-break: break-all;
             background: #f4f4f4;
             padding: 10px;
             border-radius: 5px;
             font-family: 'Courier New', monospace;
             font-size: 14px;
-        }
-        .timestamp {
-            margin-top: 10px;
-            font-size: 12px;
+            text-align: left;
             color: #333;
+            white-space: pre-wrap;
+        }
+        .info-box {
+            margin-top: 15px;
+            text-align: left;
+        }
+        h3 {
+            margin-bottom: 5px;
+            color: #764ba2;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h2>Calculadora SHA-256</h2>
-        <input type="file" id="entradaArquivo">
-        <p id="saidaHash">SHA-256 aparecerá aqui...</p>
-        <p id="timestamp" class="timestamp">Data e hora da geração do hash aparecerão aqui...</p>
+        <h2>Analisador de Arquivos</h2>
+        <input type="file" id="entradaArquivo" accept="image/*">
+        
+        <div class="info-box">
+            <h3>SHA-256:</h3>
+            <p id="saidaHash">Aguardando arquivo...</p>
+        </div>
+        
+        <div class="info-box">
+            <h3>Metadados:</h3>
+            <pre id="metadata">Nenhum metadado detectado.</pre>
+        </div>
+        
+        <div class="info-box">
+            <h3>Informações do Usuário:</h3>
+            <pre id="userInfo">Carregando IP e data/hora...</pre>
+        </div>
     </div>
 
+    <!-- Biblioteca EXIF.js -->
+    <script src="https://cdn.jsdelivr.net/npm/exif-js"></script>
+    <!-- API para pegar IP -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/axios/1.6.2/axios.min.js"></script>
+
     <script>
-        // Função para calcular o hash SHA-256 de um arquivo
+        // Função para calcular SHA-256
         async function calcularHashSHA256(arquivo) {
-            return new Promise((resolver, rejeitar) => {
-                const leitor = new FileReader(); // Cria um leitor de arquivos
-                
-                leitor.onload = async function(evento) {
-                    const buffer = evento.target.result; // Obtém os dados do arquivo em formato binário
-                    
-                    // Calcula o hash SHA-256 usando a API Crypto
-                    const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
-                    
-                    // Converte o hash de buffer para um array de bytes
-                    const hashArray = Array.from(new Uint8Array(hashBuffer));
-                    
-                    // Converte cada byte para uma string hexadecimal e junta tudo
-                    const hashHex = hashArray.map(byte => byte.toString(16).padStart(2, '0')).join('');
-                    
-                    resolver(hashHex); // Retorna o hash calculado
-                };
-                
-                leitor.onerror = function() {
-                    rejeitar("Erro ao ler o arquivo."); // Trata erro na leitura do arquivo
-                };
-                
-                leitor.readAsArrayBuffer(arquivo); // Lê o arquivo como um buffer binário
+            const buffer = await arquivo.arrayBuffer();
+            const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            return hashArray.map(byte => byte.toString(16).padStart(2, '0')).join('');
+        }
+
+        // Função para extrair metadados (EXIF ou básicos)
+        async function extrairMetadados(arquivo) {
+            return new Promise((resolve) => {
+                if (typeof EXIF !== 'undefined') {
+                    EXIF.getData(arquivo, function() {
+                        const exifData = EXIF.getAllTags(this);
+                        if (Object.keys(exifData).length > 0) {
+                            resolve(exifData);
+                        } else {
+                            resolve(this);
+                        }
+                    });
+                } else {
+                    // Fallback para metadados básicos
+                    resolve({
+                        name: arquivo.name,
+                        type: arquivo.type,
+                        size: arquivo.size,
+                        lastModified: new Date(arquivo.lastModified).toLocaleString(),
+                    });
+                }
             });
         }
 
-        // Função para formatar a data e hora de forma legível
-        function obterDataHoraAtual() {
-            const agora = new Date();
-            const dia = String(agora.getDate()).padStart(2, '0');
-            const mes = String(agora.getMonth() + 1).padStart(2, '0');
-            const ano = agora.getFullYear();
-            const horas = String(agora.getHours()).padStart(2, '0');
-            const minutos = String(agora.getMinutes()).padStart(2, '0');
-            const segundos = String(agora.getSeconds()).padStart(2, '0');
-            return `${dia}/${mes}/${ano} ${horas}:${minutos}:${segundos}`;
+        // Função para obter IP e data/hora
+        async function obterInformacoesUsuario() {
+            try {
+                const response = await axios.get('https://api.ipify.org?format=json');
+                const ip = response.data.ip;
+                const agora = new Date();
+                return {
+                    ip,
+                    dataHora: agora.toLocaleString(),
+                    userAgent: navigator.userAgent
+                };
+            } catch (erro) {
+                return {
+                    ip: "Não foi possível obter o IP",
+                    dataHora: new Date().toLocaleString(),
+                    userAgent: navigator.userAgent
+                };
+            }
         }
 
-        // Evento acionado quando o usuário escolhe um arquivo
+        // Formatar objetos para exibição
+        function formatarObjeto(obj) {
+            return JSON.stringify(obj, null, 2);
+        }
+
+        // Evento ao selecionar arquivo
         document.getElementById('entradaArquivo').addEventListener('change', async (evento) => {
-            const arquivo = evento.target.files[0]; // Obtém o arquivo selecionado
-            if (arquivo) {
-                const hash = await calcularHashSHA256(arquivo); // Calcula o hash SHA-256 do arquivo
-                const dataHora = obterDataHoraAtual(); // Obtém a data e hora atuais
+            const arquivo = evento.target.files[0];
+            if (!arquivo) return;
 
-                // Exibe o hash e a data/hora na tela
-                document.getElementById('saidaHash').innerText = `HASH: ${hash}`;
-                document.getElementById('timestamp').innerText = `Data e Hora: ${dataHora}`;
+            try {
+                // Atualiza interface durante processamento
+                document.getElementById('saidaHash').textContent = "Calculando...";
+                document.getElementById('metadata').textContent = "Extraindo metadados...";
+                
+                // Processa em paralelo
+                const [hash, metadados, userInfo] = await Promise.all([
+                    calcularHashSHA256(arquivo),
+                    extrairMetadados(arquivo),
+                    obterInformacoesUsuario()
+                ]);
 
-                console.log('SHA-256:', hash); // Exibe o hash no console para depuração
-                console.log('Data e Hora:', dataHora); // Exibe a data e hora no console para depuração
+                // Exibe resultados
+                document.getElementById('saidaHash').textContent = hash;
+                document.getElementById('metadata').textContent = formatarObjeto(metadados);
+                document.getElementById('userInfo').textContent = formatarObjeto(userInfo);
+
+            } catch (erro) {
+                console.error("Erro:", erro);
+                document.getElementById('saidaHash').textContent = "Erro no processamento";
+                document.getElementById('metadata').textContent = "Erro ao extrair metadados";
             }
+        });
+
+        // Carrega informações do usuário ao iniciar
+        obterInformacoesUsuario().then(info => {
+            document.getElementById('userInfo').textContent = formatarObjeto(info);
         });
     </script>
 </body>
