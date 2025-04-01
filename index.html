@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calculadora SHA-256</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+        }
+        .container {
+            background: rgba(255, 255, 255, 0.9);
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            text-align: center;
+            color: black;
+        }
+        input {
+            margin: 15px 0;
+            padding: 10px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            background: #764ba2;
+            color: white;
+            font-size: 16px;
+        }
+        input:hover {
+            background: #5a3e88;
+        }
+        p {
+            word-break: break-all;
+            background: #f4f4f4;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+        }
+        .timestamp {
+            margin-top: 10px;
+            font-size: 12px;
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Calculadora SHA-256</h2>
+        <input type="file" id="entradaArquivo">
+        <p id="saidaHash">SHA-256 aparecerá aqui...</p>
+        <p id="timestamp" class="timestamp">Data e hora da geração do hash aparecerão aqui...</p>
+    </div>
+
+    <script>
+        // Função para calcular o hash SHA-256 de um arquivo
+        async function calcularHashSHA256(arquivo) {
+            return new Promise((resolver, rejeitar) => {
+                const leitor = new FileReader(); // Cria um leitor de arquivos
+                
+                leitor.onload = async function(evento) {
+                    const buffer = evento.target.result; // Obtém os dados do arquivo em formato binário
+                    
+                    // Calcula o hash SHA-256 usando a API Crypto
+                    const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+                    
+                    // Converte o hash de buffer para um array de bytes
+                    const hashArray = Array.from(new Uint8Array(hashBuffer));
+                    
+                    // Converte cada byte para uma string hexadecimal e junta tudo
+                    const hashHex = hashArray.map(byte => byte.toString(16).padStart(2, '0')).join('');
+                    
+                    resolver(hashHex); // Retorna o hash calculado
+                };
+                
+                leitor.onerror = function() {
+                    rejeitar("Erro ao ler o arquivo."); // Trata erro na leitura do arquivo
+                };
+                
+                leitor.readAsArrayBuffer(arquivo); // Lê o arquivo como um buffer binário
+            });
+        }
+
+        // Função para formatar a data e hora de forma legível
+        function obterDataHoraAtual() {
+            const agora = new Date();
+            const dia = String(agora.getDate()).padStart(2, '0');
+            const mes = String(agora.getMonth() + 1).padStart(2, '0');
+            const ano = agora.getFullYear();
+            const horas = String(agora.getHours()).padStart(2, '0');
+            const minutos = String(agora.getMinutes()).padStart(2, '0');
+            const segundos = String(agora.getSeconds()).padStart(2, '0');
+            return `${dia}/${mes}/${ano} ${horas}:${minutos}:${segundos}`;
+        }
+
+        // Evento acionado quando o usuário escolhe um arquivo
+        document.getElementById('entradaArquivo').addEventListener('change', async (evento) => {
+            const arquivo = evento.target.files[0]; // Obtém o arquivo selecionado
+            if (arquivo) {
+                const hash = await calcularHashSHA256(arquivo); // Calcula o hash SHA-256 do arquivo
+                const dataHora = obterDataHoraAtual(); // Obtém a data e hora atuais
+
+                // Exibe o hash e a data/hora na tela
+                document.getElementById('saidaHash').innerText = `HASH: ${hash}`;
+                document.getElementById('timestamp').innerText = `Data e Hora: ${dataHora}`;
+
+                console.log('SHA-256:', hash); // Exibe o hash no console para depuração
+                console.log('Data e Hora:', dataHora); // Exibe a data e hora no console para depuração
+            }
+        });
+    </script>
+</body>
+</html>
